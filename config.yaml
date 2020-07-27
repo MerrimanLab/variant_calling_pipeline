@@ -1,0 +1,12 @@
+sequences_metadata: exome_sequences_metadata.tsv 
+
+
+# b37 reference files
+b37_ref: references/hs37d5.fa
+b37_dbsnp: references/dbsnp_138.b37.vcf
+b37_mills: references/Mills_and_1000G_gold_standard.indels.b37.vcf
+b37_indels: references/1000G_phase1.indels.b37.vcf
+b37_exome: references/Broad.human.exome.b37.interval_list
+b37_kgp: references/1000G_phase1.snps.high_confidence.b37.vcf
+b37_hapmap: references/hapmap_3.3.b37.vcf
+b37_omni: references/1000G_omni2.5.b37.vcf
