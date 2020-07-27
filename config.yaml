@@ -10,3 +10,14 @@ b37_exome: references/Broad.human.exome.b37.interval_list
 b37_kgp: references/1000G_phase1.snps.high_confidence.b37.vcf
 b37_hapmap: references/hapmap_3.3.b37.vcf
 b37_omni: references/1000G_omni2.5.b37.vcf
+
+# b38 reference files
+b38_ref: references/gatk_grch38_resource_bundle/Homo_sapiens_assembly38.fasta
+b38_dbsnp: references/gatk_grch38_resource_bundle/Homo_sapiens_assembly38.dbsnp138.vcf
+b38_mills: references/gatk_grch38_resource_bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+b38_indels: references/gatk_grch38_resource_bundle/Homo_sapiens_assembly38.known_indels.vcf.gz
+b38_kgp: references/gatk_grch38_resource_bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz
+b38_hapmap: references/gatk_grch38_resource_bundle/hapmap_3.3.hg38.vcf.gz
+b38_omni: references/gatk_grch38_resource_bundle/1000G_omni2.5.hg38.vcf.gz
+
+
