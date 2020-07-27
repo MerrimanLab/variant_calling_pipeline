@@ -1,0 +1,328 @@
+dbsnp = config["b37_dbsnp"]
+mills = config["b37_mills"]
+indels = config["b37_indels"]
+ref = config["b37_ref"]
+exome = config["b37_exome"]
+hapmap = config["b37_hapmap"]
+kgp = config["b37_kgp"]
+omni = config["b37_omni"]
+
+def get_fq(wildcards):
+        return sequences.loc[(wildcards.unique_id), ["fq1", "fq2"]].dropna()
+
+def get_rg(wildcards):
+        return sequences.loc[(wildcards.unique_id), ["rg"]].dropna()["rg"]
+
+def get_sample(wildcards):
+        return sequences.loc[(wildcards.unique_id), ["Sample"]].dropna()["Sample"]
+
+rule align_fastq:
+    input: 
+        ref = ref,
+        fq = get_fq     
+    output: 
+        temp("b37/aligned_bam_b37/{sample}/{sample}.{unique_id}_b37.bam")
+    log:
+        "b37/logs/bwamem/{sample}/{unique_id}.log"
+    threads: 8
+    params:
+        nice = nice_cmd,
+        RG= get_rg
+    message: "Aligning unique_id: {wildcards.unique_id} using read group {params.RG}.\nInput is {input}.\nOutput file is {output}"
+    shell:
+        "{params.nice} bwa mem -t {threads} -p -R \"{params.RG}\" -M {input.ref} {input.fq} 2> {log} | samtools view -Shb > {output}" 
+
+
+rule sort_bam:
+    input: 
+        "b37/aligned_bam_b37/{sample}/{sample}.{unique_id}_b37.bam"
+    output: 
+        bam=temp("b37/aligned_bam_b37/{sample}/{sample}.{unique_id}_b37.sorted.bam"),
+        bai=temp("b37/aligned_bam_b37/{sample}/{sample}.{unique_id}_b37.sorted.bam.bai")
+    threads: 8
+    shell:
+        """
+            samtools sort --threads {threads} -o {output.bam} {input} &&
+            samtools index {output.bam}
+        """
+
+rule idx_stats:
+    input:
+        bam="b37/aligned_bam_b37/{sample}/{sample}.{unique_id}_b37.sorted.bam",
+        bai="b37/aligned_bam_b37/{sample}/{sample}.{unique_id}_b37.sorted.bam.bai"
+    output:
+        "b37/stats/bwa/{sample}/{sample}.{unique_id}_b37.idxstats.tsv"
+    params:
+        nice = nice_cmd
+    shell:
+        "{params.nice} samtools idxstats {input.bam} > {output}"
+
+
+rule clean:
+    input:
+        bam="b37/aligned_bam_b37/{sample}/{sample}.{unique_id}_b37.sorted.bam",
+        bai="b37/aligned_bam_b37/{sample}/{sample}.{unique_id}_b37.sorted.bam.bai"
+    output:
+        bam=temp("b37/aligned_bam_b37/{sample}/{sample}.{unique_id}.clean.bam"),
+        bai=temp("b37/aligned_bam_b37/{sample}/{sample}.{unique_id}.clean.bai")
+    log:
+        "b37/logs/cleansam/{sample}/{unique_id}_clean.log"
+    wildcard_constraints:
+        sample="[A-Za-z\d-]+"
+    params:
+        nice = nice_cmd
+    shell:
+        "{params.nice} gatk CleanSam -I {input.bam} -O {output.bam} -CREATE_INDEX true 2> {log}"
+
+
+def getSampleGroupedBams(wildcards):
+    return ["".join("b37/aligned_bam_b37/"+wildcards.group+"/"+wildcards.group+"."+s+".clean.bam") for s in samplesInGroups[wildcards.group]]
+    
+def getSampleGroupedBais(wildcards):
+    return ["".join("b37/aligned_bam_b37/"+wildcards.group+"/"+wildcards.group+"."+s+".clean.bai") for s in samplesInGroups[wildcards.group]]
+
+rule merge_bams:
+    input:
+        bam= getSampleGroupedBams,
+        bai= getSampleGroupedBais
+    output:
+        bam="b37/aligned_bam_b37/{group}/{group}_b37.merged.bam",
+        bai="b37/aligned_bam_b37/{group}/{group}_b37.merged.bai"
+    log:
+        "b37/logs/merge_bam/{group}/{group}_merge.log"
+    params:
+        nice = nice_cmd
+    threads: 2
+    shell:
+        "{params.nice} gatk MergeSamFiles  $(echo {input.bam} | sed 's/^\| / -I /g')  -O {output.bam} --CREATE_INDEX true --ASSUME_SORTED true --USE_THREADING true 2> {log}"
+
+
+
+rule mark_dup:
+    input:
+        bam="b37/aligned_bam_b37/{sample}/{sample}_b37.merged.bam",
+        bai="b37/aligned_bam_b37/{sample}/{sample}_b37.merged.bai"
+    output:
+        bam="b37/aligned_bam_b37/marked_dup/{sample}_b37.clean.markdup.bam",
+        bai="b37/aligned_bam_b37/marked_dup/{sample}_b37.clean.markdup.bai",
+        metrics="b37/stats/mark_dups/{sample}.dup_metrics.txt"
+    log:
+        "b37/logs/markdup/{sample}_markdup.log"
+    params:
+        nice = nice_cmd
+    shell:
+        """
+            {params.nice} gatk MarkDuplicates -I {input.bam} -O {output.bam} -METRICS_FILE {output.metrics} -CREATE_INDEX true  -ASSUME_SORTED true 2> {log} 
+        """
+
+rule base_recal:
+    input:
+        bam="b37/aligned_bam_b37/marked_dup/{sample}_b37.clean.markdup.bam",
+        bai="b37/aligned_bam_b37/marked_dup/{sample}_b37.clean.markdup.bai",
+        dbsnp = dbsnp,
+        mills = mills,
+        indels = indels,
+        ref = ref
+    output:
+        bqsr = "b37/aligned_bam_b37/bqsr/{sample}_b37.bqsr.table"
+    log:
+        "b37/logs/bqsr/{sample}.bqsr.log"
+    params:
+        nice = nice_cmd
+    shell:
+        "{params.nice} gatk BaseRecalibrator -I {input.bam} -R {input.ref} --known-sites {input.dbsnp} --known-sites {input.mills} --known-sites {input.indels} -O {output} 2> {log}"
+
+
+rule apply_bqsr:
+    input:
+        bam="b37/aligned_bam_b37/marked_dup/{sample}_b37.clean.markdup.bam",
+        bai="b37/aligned_bam_b37/marked_dup/{sample}_b37.clean.markdup.bai",
+        ref = ref,
+        bqsr = "b37/aligned_bam_b37/bqsr/{sample}_b37.bqsr.table"
+    output:
+        bam="b37/aligned_bam_b37/bqsr/{sample}_b37.bqsr.bam",
+        bai="b37/aligned_bam_b37/bqsr/{sample}_b37.bqsr.bai"
+    log:
+        "b37/logs/bqsr/{sample}.apply_bqsr.log"
+    params:
+        nice = nice_cmd
+    shell:
+        "{params.nice} gatk ApplyBQSR -R {input.ref} -I {input.bam} --bqsr-recal-file {input.bqsr} -O {output.bam} 2> {log}"
+
+
+rule haplotype_caller:
+    input:
+        ref = ref,
+        dbsnp = dbsnp,
+        bam="b37/aligned_bam_b37/bqsr/{sample}_b37.bqsr.bam",
+        bai="b37/aligned_bam_b37/bqsr/{sample}_b37.bqsr.bai",
+        intervals = exome
+    output:
+        vcf = "b37/raw_vcf/{sample}_b37.raw.snps.indels.g.vcf.gz"
+    log:
+        "b37/logs/vcf/{sample}.raw_vcf.log"
+    params:
+        nice = nice_cmd
+    threads: 4
+    shell:
+        "{params.nice} gatk --java-options -Xmx30g --spark-runner LOCAL HaplotypeCaller -R {input.ref} -I {input.bam}   -ERC GVCF --dbsnp {input.dbsnp} --max-alternate-alleles 3 --read-filter OverclippedReadFilter --add-output-vcf-command-line true --create-output-variant-index true -O {output.vcf} -L {input.intervals} 2> {log}"
+
+rule chr_intervals:
+    input:
+        intervals = exome
+    output:
+        list_file = "b37/{chr}.exome.list"
+    wildcard_constraints:
+        chr="\d+"
+    shell:
+        "grep -E '^{wildcards.chr}[[:space:]]' {input.intervals} | cut -f1-3 > {output.list_file}"
+
+rule genomics_db_import:
+    input:
+        vcfs = expand("b37/raw_vcf/{sample}_b37.raw.snps.indels.g.vcf.gz", sample = sequences.Sample.unique()),
+        ref = ref
+    output:
+        dir = directory("b37/db_import_{chr}")
+    wildcard_constraints:
+        chr="\d+"
+    log:
+        "b37/logs/vcf/db_import_{chr}.log"
+    params:
+        nice = nice_cmd,
+        tmp_dir = "b37/tmp"
+    shell:
+        "mkdir -p {params.tmp_dir}; {params.nice} gatk --java-options \"-Xmx16g -Xms8g\" GenomicsDBImport $(echo {input.vcfs} | sed 's/^\| / -V /g') -L {wildcards.chr} --genomicsdb-workspace-path {output.dir} --tmp-dir {params.tmp_dir} 2> {log}"
+
+rule genotype_vcf:
+    input:
+        db = rules.genomics_db_import.output.dir,
+        ref = ref
+    output:
+        vcf = "b37/raw_vcf/{chr}_all_samples_genotyped_b37.raw.snps.indels.vcf.gz"
+    wildcard_constraints:
+        chr="\d+"
+    log:
+        "b37/logs/vcf/genotype_vcf_{chr}.log"
+    params:
+        nice = nice_cmd,
+        tmp_dir = "b37/tmp"
+    shell:
+        "mkdir -p {params.tmp_dir} ;{params.nice} gatk --java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\" --spark-runner LOCAL GenotypeGVCFs -R {input.ref} -V gendb://{input.db} -L {wildcards.chr} -O {output.vcf} --tmp-dir={params.tmp_dir} 2> {log}"
+
+
+rule sites_only:
+    input:
+        vcf = "b37/raw_vcf/{chr}_all_samples_genotyped_b37.raw.snps.indels.vcf.gz"
+    output:
+        vcf = temp("b37/sites_vcf/{chr}_all_samples_genotyped_b37.sites_only.vcf.gz")
+    log:
+        "b37/logs/vcf/sites_{chr}.log"
+    shell:
+        "gatk MakeSitesOnlyVcf -I {input.vcf} -O {output.vcf} 2> {log}"
+
+rule concat_sites_vcf:
+    input:
+        vcfs = expand("b37/sites_vcf/{chr}_all_samples_genotyped_b37.sites_only.vcf.gz", chr = CHRS)
+    output:
+        vcf = "b37/sites_vcf/allchr_all_samples_genotyped_b37.sites_only.vcf.gz",
+        vcf_tbi = "b37/sites_vcf/allchr_all_samples_genotyped_b37.sites_only.vcf.gz.tbi"
+    log:
+        "b37/logs/vcf/concat_site_vcfs.log"
+    threads: 8
+    params:
+        nice = nice_cmd
+    shell:
+        "{params.nice} bcftools concat --threads {threads} -O z -o {output.vcf} {input.vcfs} 2> {log} && tabix -p vcf {output.vcf}"
+
+rule indel_recal:
+    input:
+        vcf = "b37/sites_vcf/allchr_all_samples_genotyped_b37.sites_only.vcf.gz",
+        vcf_tbi = "b37/sites_vcf/allchr_all_samples_genotyped_b37.sites_only.vcf.gz.tbi",
+        ref = ref,
+        mills = mills,
+        dbsnp = dbsnp
+    output:
+        recal = "b37/vqsr/indel.recal",
+        tranches = "b37/vqsr/indel.tranches",
+        r = "b37/vqsr/indel.R"
+    params:
+        nice = nice_cmd,
+        java_opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\"",
+        max_gaussians = "--max-gaussians 4",
+        mills = "--resource:mills,known=false,training=true,truth=true,prior=12.0",
+        dbsnp = "--resource:dbsnp,known=true,training=false,truth=false,prior=2.0",
+        an = "-an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum",
+        mode = "-mode INDEL"
+    log:
+        "b37/logs/vsqr/vqsr_indel.log"
+    shell:
+        "{params.nice} gatk {params.java_opts} VariantRecalibrator -R {input.ref} -V {input.vcf} {params.max_gaussians} {params.mills} {input.mills} {params.dbsnp} {input.dbsnp} {params.an} {params.mode} -O {output.recal} --tranches-file {output.tranches} --rscript-file {output.r} 2> {log}"
+    
+
+
+rule snp_recal:
+    input:
+        vcf = "b37/sites_vcf/allchr_all_samples_genotyped_b37.sites_only.vcf.gz",
+        vcf_tbi = "b37/sites_vcf/allchr_all_samples_genotyped_b37.sites_only.vcf.gz.tbi",
+        ref = ref,
+        hapmap = hapmap,
+        omni = omni,
+        kgp = kgp,
+        dbsnp = dbsnp
+    output:
+        recal = "b37/vqsr/snp.recal",
+        tranches = "b37/vqsr/snp.tranches",
+        r = "b37/vqsr/snp.R"
+    params:
+        nice = nice_cmd,
+        java_opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\"",
+        hapmap = "--resource:hapmap,known=false,training=true,truth=true,prior=15.0",
+        omni = "--resource:omni,known=false,traning=true,truth=false,prior=12.0",
+        kgp = "--resource:1000G,known=false,training=true,truth=false,prior=10.0",
+        dbsnp = "--resource:dbsnp,known=true,training=false,truth=false,prior=2.0",
+        an = "-an QD -an MQRankSum -an ReadPosRankSum -an FS -an SOR -mode SNP -an InbreedingCoeff -an DP",
+        tranche = "--tranche 99.99 --tranche 99.9 --tranche 99.0 --tranche 95.0 --tranche 90.0",
+        max_gaussians = "--max-gaussians 6"
+    log:
+        "b37/logs/vsqr/vqsr_snp.log"
+    shell:
+        "{params.nice} gatk {params.java_opts} VariantRecalibrator -R {input.ref} -V {input.vcf} {params.max_gaussians} {params.hapmap} {input.hapmap} {params.omni} {input.omni} {params.kgp} {input.kgp} {params.dbsnp} {input.dbsnp} {params.an} -O {output.recal} --tranches-file {output.tranches} --rscript-file {output.r} 2> {log}"
+
+rule apply_indel_recal:
+    input: 
+        vcf = "b37/raw_vcf/{chr}_all_samples_genotyped_b37.raw.snps.indels.vcf.gz",
+        recal = "b37/vqsr/indel.recal",
+        tranches = "b37/vqsr/indel.tranches",
+        ref = ref
+    output:
+        vcf = temp("b37/vqsr_vcf/{chr}_all_samples_genotyped_b37.vqsr.indels.vcf.gz"),
+        vcf_tbi = temp("b37/vqsr_vcf/{chr}_all_samples_genotyped_b37.vqsr.indels.vcf.gz.tbi")
+    params:
+        nice = nice_cmd,
+        java_opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\"",
+        filter = "--truth-sensitivity-filter-level 99.0",
+        mode = "--mode INDEL"
+    log:
+        "b37/vqsr/apply_indel_{chr}.log"
+    shell:
+        "{params.nice} gatk {params.java_opts} ApplyVQSR -R {input.ref} -V {input.vcf} -O {output.vcf} {params.filter} --tranches-file {input.tranches} --recal-file {input.recal} {params.mode} 2> {log}"
+
+rule apply_snp_recal:
+    input: 
+        vcf = "b37/vqsr_vcf/{chr}_all_samples_genotyped_b37.vqsr.indels.vcf.gz",
+        recal = "b37/vqsr/snp.recal",
+        tranches = "b37/vqsr/snp.tranches",
+        ref = ref
+    output:
+        vcf = "b37/vqsr_vcf/{chr}_all_samples_genotyped_b37.vqsr.snps.indels.vcf.gz",
+        vcf_tbi = "b37/vqsr_vcf/{chr}_all_samples_genotyped_b37.vqsr.snps.indels.vcf.gz.tbi"
+    params:
+        nice = nice_cmd,
+        java_opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\"",
+        filter = "--truth-sensitivity-filter-level 99.0",
+        mode = "--mode SNP"
+    log:
+        "b37/vqsr/apply_snp_{chr}.log"
+    shell:
+        "{params.nice} gatk {params.java_opts} ApplyVQSR -R {input.ref} -V {input.vcf} -O {output.vcf} {params.filter} --tranches-file {input.tranches} --recal-file {input.recal} {params.mode} 2> {log}"
+
