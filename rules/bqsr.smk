@@ -1,16 +1,16 @@
 
 rule base_recal:
     input:
-        bam=BUILD + "/aligned_bam_" + BUILD + "/marked_dup/{sample}_" + BUILD + ".clean.markdup.bam",
-        bai=BUILD + "/aligned_bam_" + BUILD + "/marked_dup/{sample}_" + BUILD + ".clean.markdup.bai",
-        dbsnp = dbsnp,
-        mills = mills,
-        indels = indels,
-        ref = ref
+        bam="{build}/aligned_bam/marked_dup/{sample}_{build}.clean.markdup.bam",
+        bai="{build}/aligned_bam/marked_dup/{sample}_{build}.clean.markdup.bai",
+        dbsnp = get_dbsnp,
+        mills = get_mills,
+        indels = get_indels,
+        ref = get_ref
     output:
-        bqsr = BUILD + "/aligned_bam_" + BUILD + "/bqsr/{sample}_" + BUILD + ".bqsr.table"
+        bqsr = "{build}/aligned_bam/bqsr/{sample}_{build}.bqsr.table"
     log:
-        BUILD + "/logs/bqsr/{sample}.bqsr.log"
+        "{build}/logs/bqsr/{sample}.bqsr.log"
     params:
         nice = nice_cmd
     shell:
@@ -19,15 +19,15 @@ rule base_recal:
 
 rule apply_bqsr:
     input:
-        bam=BUILD + "/aligned_bam_" + BUILD + "/marked_dup/{sample}_" + BUILD + ".clean.markdup.bam",
-        bai=BUILD + "/aligned_bam_" + BUILD + "/marked_dup/{sample}_" + BUILD + ".clean.markdup.bai",
-        ref = ref,
-        bqsr = BUILD + "/aligned_bam_" + BUILD + "/bqsr/{sample}_" + BUILD + ".bqsr.table"
+        bam="{build}/aligned_bam/marked_dup/{sample}_{build}.clean.markdup.bam",
+        bai="{build}/aligned_bam/marked_dup/{sample}_{build}.clean.markdup.bai",
+        ref = get_ref,
+        bqsr = "{build}/aligned_bam/bqsr/{sample}_{build}.bqsr.table"
     output:
-        bam=BUILD + "/aligned_bam_" + BUILD + "/bqsr/{sample}_" + BUILD + ".bqsr.bam",
-        bai=BUILD + "/aligned_bam_" + BUILD + "/bqsr/{sample}_" + BUILD + ".bqsr.bai"
+        bam="{build}/aligned_bam/bqsr/{sample}_{build}.bqsr.bam",
+        bai="{build}/aligned_bam/bqsr/{sample}_{build}.bqsr.bai"
     log:
-        BUILD + "/logs/bqsr/{sample}.apply_bqsr.log"
+        "{build}/logs/bqsr/{sample}.apply_bqsr.log"
     params:
         nice = nice_cmd
     shell:

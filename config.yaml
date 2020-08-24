@@ -3,7 +3,7 @@ sequences_metadata: exome_sequences_metadata.tsv
 
 # b37 reference files
 b37_ref: references/hs37d5.fa
-b37_dbsnp: references/dbsnp_138.b37.vcf
+b37_dbsnp: references/dbsnp151/dbsnp151_20180423_GRCh37.vcf.gz
 b37_mills: references/Mills_and_1000G_gold_standard.indels.b37.vcf
 b37_indels: references/1000G_phase1.indels.b37.vcf
 b37_exome: references/Broad.human.exome.b37.interval_list
@@ -13,7 +13,7 @@ b37_omni: references/1000G_omni2.5.b37.vcf
 
 # b38 reference files
 b38_ref: references/gatk_grch38_resource_bundle/Homo_sapiens_assembly38.fasta
-b38_dbsnp: references/gatk_grch38_resource_bundle/Homo_sapiens_assembly38.dbsnp138.vcf
+b38_dbsnp: references/dbsnp151/dbsnp151_20180418_Hg38.vcf.gz
 b38_mills: references/gatk_grch38_resource_bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
 b38_indels: references/gatk_grch38_resource_bundle/Homo_sapiens_assembly38.known_indels.vcf.gz
 b38_kgp: references/gatk_grch38_resource_bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz

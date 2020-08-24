@@ -1,10 +1,10 @@
 
 rule idx_stats:
     input:
-        bam=BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}.{unique_id}_" + BUILD + ".sorted.bam",
-        bai=BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}.{unique_id}_" + BUILD + ".sorted.bam.bai"
+        bam="{build}/aligned_bam/{sample}/{sample}.{unique_id}_{build}.sorted.bam",
+        bai="{build}/aligned_bam/{sample}/{sample}.{unique_id}_{build}.sorted.bam.bai"
     output:
-        BUILD + "/stats/bwa/{sample}/{sample}.{unique_id}_" + BUILD + ".idxstats.tsv"
+        "{build}/stats/bwa/{sample}/{sample}.{unique_id}_{build}.idxstats.tsv"
     params:
         nice = nice_cmd
     shell:
@@ -13,13 +13,13 @@ rule idx_stats:
 
 rule clean:
     input:
-        bam=BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}.{unique_id}_" + BUILD + ".sorted.bam",
-        bai=BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}.{unique_id}_" + BUILD + ".sorted.bam.bai"
+        bam="{build}/aligned_bam/{sample}/{sample}.{unique_id}_{build}.sorted.bam",
+        bai="{build}/aligned_bam/{sample}/{sample}.{unique_id}_{build}.sorted.bam.bai"
     output:
-        bam=temp(BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}.{unique_id}.clean.bam"),
-        bai=temp(BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}.{unique_id}.clean.bai")
+        bam=temp("{build}/aligned_bam/{sample}/{sample}.{unique_id}.clean.bam"),
+        bai=temp("{build}/aligned_bam/{sample}/{sample}.{unique_id}.clean.bai")
     log:
-        BUILD + "/logs/cleansam/{sample}/{unique_id}_clean.log"
+        "{build}/logs/cleansam/{sample}/{unique_id}_clean.log"
     wildcard_constraints:
         sample="[A-Za-z\d-]+"
     params:
@@ -32,14 +32,15 @@ rule merge_bams:
         bam= getSampleGroupedBams,
         bai= getSampleGroupedBais
     output:
-        bam=BUILD + "/aligned_bam_" + BUILD + "/{group}/{group}_" + BUILD + ".merged.bam",
-        bai=BUILD + "/aligned_bam_" + BUILD + "/{group}/{group}_" + BUILD + ".merged.bai"
+        bam= "{build}/aligned_bam/{group}/{group}_{build}.merged.bam",
+        bai="{build}/aligned_bam/{group}/{group}_{build}.merged.bai"
     log:
-        BUILD + "/logs/merge_bam/{group}/{group}_merge.log"
+        "{build}/logs/merged_bam/{group}/{group}_merge.log"
     params:
-        nice = nice_cmd
+        nice = nice_cmd,
+        extra ="--CREATE_INDEX true --ASSUME_SORTED true --USE_THREADING true" 
     threads: 2
     shell:
-        "{params.nice} gatk MergeSamFiles  $(echo {input.bam} | sed 's/^\| / -I /g')  -O {output.bam} --CREATE_INDEX true --ASSUME_SORTED true --USE_THREADING true 2> {log}"
+        "{params.nice} gatk MergeSamFiles  $(echo {input.bam} | sed 's/^\| / -I /g')  -O {output.bam} {params.extra}  2> {log}"
 
 

@@ -1,17 +1,18 @@
 rule mark_dup:
     input:
-        bam=BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}_" + BUILD + ".merged.bam",
-        bai=BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}_" + BUILD + ".merged.bai"
+        bam="{build}/aligned_bam/{sample}/{sample}_{build}.merged.bam",
+        bai="{build}/aligned_bam/{sample}/{sample}_{build}.merged.bai"
     output:
-        bam=BUILD + "/aligned_bam_" + BUILD + "/marked_dup/{sample}_" + BUILD + ".clean.markdup.bam",
-        bai=BUILD + "/aligned_bam_" + BUILD + "/marked_dup/{sample}_" + BUILD + ".clean.markdup.bai",
-        metrics=BUILD + "/stats/mark_dups/{sample}.dup_metrics.txt"
+        bam="{build}/aligned_bam/marked_dup/{sample}_{build}.clean.markdup.bam",
+        bai="{build}/aligned_bam/marked_dup/{sample}_{build}.clean.markdup.bai",
+        metrics="{build}/stats/mark_dups/{sample}.dup_metrics.txt"
     log:
-        BUILD + "/logs/markdup/{sample}_markdup.log"
+        "{build}/logs/markdup/{sample}_markdup.log"
     params:
-        nice = nice_cmd
+        nice = nice_cmd,
+        extra ="-CREATE_INDEX true  -ASSUME_SORTED true" 
     shell:
         """
-            {params.nice} gatk MarkDuplicates -I {input.bam} -O {output.bam} -METRICS_FILE {output.metrics} -CREATE_INDEX true  -ASSUME_SORTED true 2> {log} 
+            {params.nice} gatk MarkDuplicates -I {input.bam} -O {output.bam} -METRICS_FILE {output.metrics} {params.extra} 2> {log} 
         """
 

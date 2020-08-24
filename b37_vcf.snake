@@ -1,0 +1,181 @@
+
+rule haplotype_caller:
+    input:
+        ref = get_ref,
+        dbsnp = get_dbsnp,
+        bam="{build}/aligned_bam/bqsr/{sample}_{build}.bqsr.bam",
+        bai="{build}/aligned_bam/bqsr/{sample}_{build}.bqsr.bai"
+    output:
+        vcf = "{build}/raw_vcf/{sample}_{build}.raw.snps.indels.g.vcf.gz"
+    log:
+        "{build}/logs/vcf/{sample}.raw_vcf.log"
+    params:
+        nice = nice_cmd,
+        intervals = ["-L {chr}".format(chr=chr) for chr in CHRS]
+    threads: 4
+    shell:
+        "{params.nice} gatk --java-options -Xmx30g --spark-runner LOCAL HaplotypeCaller -R {input.ref} -I {input.bam}   -ERC GVCF --dbsnp {input.dbsnp} --max-alternate-alleles 3 --read-filter OverclippedReadFilter --add-output-vcf-command-line true --create-output-variant-index true -O {output.vcf} {params.intervals} 2> {log}"
+
+#rule chr_intervals:
+#    input:
+#        intervals = b37_exome
+#    output:
+#        list_file = "{build}/{chr}.exome.list"
+#    wildcard_constraints:
+#        chr="\d+"
+#    shell:
+#        "grep -E '^{wildcards.chr}[[:space:]]' {input.intervals} | cut -f1-3 > {output.list_file}"
+
+rule genomics_db_import:
+    input:
+        vcfs = expand("{build}/raw_vcf/{sample}_{build}.raw.snps.indels.g.vcf.gz", sample = sequences.Sample.unique(), build = "b37"),
+        ref = get_ref
+    output:
+        dir = directory("{build}/db_import_{chr}")
+    wildcard_constraints:
+        chr="\d+"
+    log:
+        "{build}/logs/vcf/db_import_{chr}.log"
+    params:
+        nice = nice_cmd,
+        tmp_dir = "{build}/tmp"
+    shell:
+        "mkdir -p {params.tmp_dir}; {params.nice} gatk --java-options \"-Xmx16g -Xms8g\" GenomicsDBImport $(echo {input.vcfs} | sed 's/^\| / -V /g') -L {wildcards.chr} --genomicsdb-workspace-path {output.dir} --tmp-dir {params.tmp_dir} 2> {log}"
+
+rule genotype_vcf:
+    input:
+        db = rules.genomics_db_import.output.dir,
+        ref = get_ref
+    output:
+        vcf = "{build}/raw_vcf/{chr}_all_samples_genotyped_{build}.raw.snps.indels.vcf.gz",
+        vcf_tbi = "{build}/raw_vcf/{chr}_all_samples_genotyped_{build}.raw.snps.indels.vcf.gz.tbi"
+    wildcard_constraints:
+        chr="\d+"
+    log:
+        "{build}/logs/vcf/genotype_vcf_{chr}.log"
+    params:
+        nice = nice_cmd,
+        tmp_dir = "{build}/tmp",
+        opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\" --spark-runner LOCAL"
+    shell:
+        "mkdir -p {params.tmp_dir} ;{params.nice} gatk {params.opts} GenotypeGVCFs -R {input.ref} -V gendb://{input.db} -L {wildcards.chr} -O {output.vcf} --tmp-dir={params.tmp_dir} 2> {log}"
+
+
+rule sites_only:
+    input:
+        vcf = "{build}/raw_vcf/{chr}_all_samples_genotyped_{build}.raw.snps.indels.vcf.gz"
+    output:
+        vcf = temp("{build}/sites_vcf/{chr}_all_samples_genotyped_{build}.sites_only.vcf.gz")
+    log:
+        "{build}/logs/vcf/sites_{chr}.log"
+    shell:
+        "gatk MakeSitesOnlyVcf -I {input.vcf} -O {output.vcf} 2> {log}"
+
+rule concat_sites_vcf:
+    input:
+        vcfs = expand("{build}/sites_vcf/{chr}_all_samples_genotyped_{build}.sites_only.vcf.gz", chr = CHRS, build = "b37")
+    output:
+        vcf = "{build}/sites_vcf/allchr_all_samples_genotyped_{build}.sites_only.vcf.gz",
+        vcf_tbi = "{build}/sites_vcf/allchr_all_samples_genotyped_{build}.sites_only.vcf.gz.tbi"
+    log:
+        "{build}/logs/vcf/concat_site_vcfs.log"
+    threads: 8
+    params:
+        nice = nice_cmd
+    shell:
+        "{params.nice} bcftools concat --threads {threads} -O z -o {output.vcf} {input.vcfs} 2> {log} && tabix -p vcf {output.vcf}"
+
+rule indel_recal:
+    input:
+        vcf = "{build}/sites_vcf/allchr_all_samples_genotyped_{build}.sites_only.vcf.gz",
+        vcf_tbi = "{build}/sites_vcf/allchr_all_samples_genotyped_{build}.sites_only.vcf.gz.tbi",
+        ref = get_ref,
+        mills = get_mills,
+        dbsnp = get_dbsnp
+    output:
+        recal = "{build}/vqsr/indel.recal",
+        tranches = "{build}/vqsr/indel.tranches",
+        r = "{build}/vqsr/indel.R"
+    params:
+        nice = nice_cmd,
+        java_opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\"",
+        max_gaussians = "--max-gaussians 4",
+        mills = "--resource:mills,known=false,training=true,truth=true,prior=12.0",
+        dbsnp = "--resource:dbsnp,known=true,training=false,truth=false,prior=2.0",
+        an = "-an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum",
+        mode = "-mode INDEL"
+    log:
+        "{build}/logs/vsqr/vqsr_indel.log"
+    shell:
+        "{params.nice} gatk {params.java_opts} VariantRecalibrator -R {input.ref} -V {input.vcf} {params.max_gaussians} {params.mills} {input.mills} {params.dbsnp} {input.dbsnp} {params.an} {params.mode} -O {output.recal} --tranches-file {output.tranches} --rscript-file {output.r} 2> {log}"
+    
+
+
+rule snp_recal:
+    input:
+        vcf = "{build}/sites_vcf/allchr_all_samples_genotyped_{build}.sites_only.vcf.gz",
+        vcf_tbi = "{build}/sites_vcf/allchr_all_samples_genotyped_{build}.sites_only.vcf.gz.tbi",
+        ref = get_ref,
+        hapmap = get_hapmap,
+        omni = get_omni,
+        kgp = get_kgp,
+        dbsnp = get_dbsnp
+    output:
+        recal = "{build}/vqsr/snp.recal",
+        tranches = "{build}/vqsr/snp.tranches",
+        r = "{build}/vqsr/snp.R"
+    params:
+        nice = nice_cmd,
+        java_opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\"",
+        hapmap = "--resource:hapmap,known=false,training=true,truth=true,prior=15.0",
+        omni = "--resource:omni,known=false,traning=true,truth=false,prior=12.0",
+        kgp = "--resource:1000G,known=false,training=true,truth=false,prior=10.0",
+        dbsnp = "--resource:dbsnp,known=true,training=false,truth=false,prior=2.0",
+        an = "-an QD -an MQRankSum -an ReadPosRankSum -an FS -an SOR -mode SNP -an InbreedingCoeff -an DP",
+        tranche = "--tranche 99.99 --tranche 99.9 --tranche 99.0 --tranche 95.0 --tranche 90.0",
+        max_gaussians = "--max-gaussians 6"
+    log:
+        "{build}/logs/vsqr/vqsr_snp.log"
+    shell:
+        "{params.nice} gatk {params.java_opts} VariantRecalibrator -R {input.ref} -V {input.vcf} {params.max_gaussians} {params.hapmap} {input.hapmap} {params.omni} {input.omni} {params.kgp} {input.kgp} {params.dbsnp} {input.dbsnp} {params.an} -O {output.recal} --tranches-file {output.tranches} --rscript-file {output.r} 2> {log}"
+
+rule apply_indel_recal:
+    input: 
+        vcf = "{build}/raw_vcf/{chr}_all_samples_genotyped_{build}.raw.snps.indels.vcf.gz",
+        vcf_tbi = "{build}/raw_vcf/{chr}_all_samples_genotyped_{build}.raw.snps.indels.vcf.gz.tbi",
+        recal = "{build}/vqsr/indel.recal",
+        tranches = "{build}/vqsr/indel.tranches",
+        ref = get_ref
+    output:
+        vcf = temp("{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.indels.vcf.gz"),
+        vcf_tbi = temp("{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.indels.vcf.gz.tbi")
+    params:
+        nice = nice_cmd,
+        java_opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\"",
+        filter = "--truth-sensitivity-filter-level 99.0",
+        mode = "--mode INDEL"
+    log:
+        "{build}/vqsr/apply_indel_{chr}.log"
+    shell:
+        "{params.nice} gatk {params.java_opts} ApplyVQSR -R {input.ref} -V {input.vcf} -O {output.vcf} {params.filter} --tranches-file {input.tranches} --recal-file {input.recal} {params.mode} 2> {log}"
+
+rule apply_snp_recal:
+    input: 
+        vcf = "{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.indels.vcf.gz",
+        vcf_tbi = "{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.indels.vcf.gz.tbi",
+        recal = "{build}/vqsr/snp.recal",
+        tranches = "{build}/vqsr/snp.tranches",
+        ref = get_ref
+    output:
+        vcf = "{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.snps.indels.vcf.gz",
+        vcf_tbi = "{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.snps.indels.vcf.gz.tbi"
+    params:
+        nice = nice_cmd,
+        java_opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\"",
+        filter = "--truth-sensitivity-filter-level 99.0",
+        mode = "--mode SNP"
+    log:
+        "{build}/vqsr/apply_snp_{chr}.log"
+    shell:
+        "{params.nice} gatk {params.java_opts} ApplyVQSR -R {input.ref} -V {input.vcf} -O {output.vcf} {params.filter} --tranches-file {input.tranches} --recal-file {input.recal} {params.mode} 2> {log}"
+

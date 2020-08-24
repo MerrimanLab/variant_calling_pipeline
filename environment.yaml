@@ -13,3 +13,4 @@ dependencies:
   - pigz =2.4
   - gatk4 =4.1.7.0-0
   - pandas =1.0.5
+  - bioconda::fastqc =0.11.9

@@ -1,9 +1,9 @@
 rule sort_bam:
     input: 
-        BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}.{unique_id}_" + BUILD + ".bam"
+         "{build}/aligned_bam/{sample}/{sample}.{unique_id}_{build}.bam"
     output: 
-        bam=temp(BUILD + "/aligned_bam_"+ BUILD + "/{sample}/{sample}.{unique_id}_" + BUILD + ".sorted.bam"),
-        bai=temp(BUILD + "/aligned_bam_" + BUILD + "/{sample}/{sample}.{unique_id}_" + BUILD + ".sorted.bam.bai")
+        bam=temp("{build}/aligned_bam/{sample}/{sample}.{unique_id}_{build}.sorted.bam"),
+        bai=temp("{build}/aligned_bam/{sample}/{sample}.{unique_id}_{build}.sorted.bam.bai")
     threads: 8
     shell:
         """
