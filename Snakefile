@@ -61,7 +61,7 @@ rule all:
     input:
         expand("qc/fastqc/{sample}.{unique_id}/", zip, sample = sequences["Sample"], unique_id = sequences["unique_id"]),
 #        expand("qc/fastqc/{sample}.{unique_id}.R2_fastqc.zip", zip, sample = sequences["Sample"], unique_id = sequences["unique_id"]),
-        expand("b37/{chr}.exome.list", chr = CHRS),
+#        expand("b37/{chr}.exome.list", chr = CHRS),
         expand(expand("{{build}}/stats/bwa/{sample}/{sample}.{unique_id}_{{build}}.idxstats.tsv", zip, sample = sequences['Sample'], unique_id =  sequences["unique_id"]), build = ["b37","b38"] ),
         expand("{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.snps.indels.vcf.gz", chr = CHRS, build = "b37"),
         expand(expand("{{build}}/aligned_bam/marked_dup/{sample}_{{build}}.clean.markdup.bam", zip, sample = sequences['Sample'], unique_id = sequences['unique_id']), build = "b38"),
