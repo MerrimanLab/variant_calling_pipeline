@@ -26,6 +26,8 @@ samplesInGroups = {}
 for sample in sequences["Sample"].unique():
   samplesInGroups[sample] = sequences.loc[(sequences['Sample'] == sample), ["unique_id"]]["unique_id"].to_list()
 
+def get_build(wildcards):
+    return BUILDS[wildcards.build]
 
 def get_fq(wildcards):
         return sequences.loc[(wildcards.unique_id), ["fq1", "fq2"]].dropna()
