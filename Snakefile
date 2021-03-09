@@ -3,8 +3,13 @@ configfile: "config.yaml"
 
 
 BUILDS= ["b37","b38"]
+
+
+    
 CHRS = list(range(1,23))
-b37_exome = config["b37_exome"]
+
+#b37_exome = config["b37_exome"]
+#b38_exome = config["b38_exome"]
 
 wildcard_constraints:
     build = "b3[78]"
@@ -61,11 +66,12 @@ rule all:
     input:
         expand("qc/fastqc/{sample}.{unique_id}/", zip, sample = sequences["Sample"], unique_id = sequences["unique_id"]),
 #        expand("qc/fastqc/{sample}.{unique_id}.R2_fastqc.zip", zip, sample = sequences["Sample"], unique_id = sequences["unique_id"]),
-#        expand("b37/{chr}.exome.list", chr = CHRS),
+#        expand("b37/{chr}.exome.list", chr = CHRS_b37),
         expand(expand("{{build}}/stats/bwa/{sample}/{sample}.{unique_id}_{{build}}.idxstats.tsv", zip, sample = sequences['Sample'], unique_id =  sequences["unique_id"]), build = ["b37","b38"] ),
         expand("{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.snps.indels.vcf.gz", chr = CHRS, build = "b37"),
         expand(expand("{{build}}/aligned_bam/marked_dup/{sample}_{{build}}.clean.markdup.bam", zip, sample = sequences['Sample'], unique_id = sequences['unique_id']), build = "b38"),
-        expand("b38/aligned_bam/bqsr/{sample}_b38.bqsr.bam", sample = sequences.Sample.unique())
+        expand("b38/aligned_bam/bqsr/{sample}_b38.bqsr.bam", sample = sequences.Sample.unique()),
+        expand("{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.snps.indels.vcf.gz", chr = CHRS, build = "b38"),
 
 
 
@@ -75,6 +81,5 @@ include: "rules/sort_bam.smk"
 include: "rules/stats_clean_merge.smk"
 include: "rules/mark_dup.smk"
 include: "rules/bqsr.smk"
-include: "b37_vcf.snake"
+include: "vcf.snake"
 #include: "b38_vcf.snake"
-

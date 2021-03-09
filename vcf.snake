@@ -1,3 +1,8 @@
+def get_chrs(wildcards):
+    if wildcards.build == "b37":
+        return ["-L {chr}".format(chr=chr) for chr in CHRS]
+    else:
+        return ["-L chr{chr}".format(chr=chr) for chr in CHRS]
 
 rule haplotype_caller:
     input:
@@ -11,7 +16,7 @@ rule haplotype_caller:
         "{build}/logs/vcf/{sample}.raw_vcf.log"
     params:
         nice = nice_cmd,
-        intervals = ["-L {chr}".format(chr=chr) for chr in CHRS]
+        intervals = get_chrs
     threads: 4
     shell:
         "{params.nice} gatk --java-options -Xmx30g --spark-runner LOCAL HaplotypeCaller -R {input.ref} -I {input.bam}   -ERC GVCF --dbsnp {input.dbsnp} --max-alternate-alleles 3 --read-filter OverclippedReadFilter --add-output-vcf-command-line true --create-output-variant-index true -O {output.vcf} {params.intervals} 2> {log}"
@@ -66,14 +71,19 @@ rule sites_only:
         vcf = "{build}/raw_vcf/{chr}_all_samples_genotyped_{build}.raw.snps.indels.vcf.gz"
     output:
         vcf = temp("{build}/sites_vcf/{chr}_all_samples_genotyped_{build}.sites_only.vcf.gz")
+    wildcard_constraints:
+        chr="\d+"
     log:
         "{build}/logs/vcf/sites_{chr}.log"
     shell:
         "gatk MakeSitesOnlyVcf -I {input.vcf} -O {output.vcf} 2> {log}"
 
+def get_sites_vcf(wildcards):
+     return expand("{build}/sites_vcf/{chr}_all_samples_genotyped_{build}.sites_only.vcf.gz", chr = CHRS, build = wildcards.build)
+
 rule concat_sites_vcf:
     input:
-        vcfs = expand("{build}/sites_vcf/{chr}_all_samples_genotyped_{build}.sites_only.vcf.gz", chr = CHRS, build = "b37")
+        vcfs = get_sites_vcf
     output:
         vcf = "{build}/sites_vcf/allchr_all_samples_genotyped_{build}.sites_only.vcf.gz",
         vcf_tbi = "{build}/sites_vcf/allchr_all_samples_genotyped_{build}.sites_only.vcf.gz.tbi"

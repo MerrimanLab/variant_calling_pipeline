@@ -1,15 +1,3 @@
-BUILD = "b37"
-
-dbsnp = config[BUILD + "_dbsnp"]
-mills = config[BUILD + "_mills"]
-indels = config[BUILD + "_indels"]
-ref = config[BUILD + "_ref"]
-exome = config[BUILD + "_exome"]
-hapmap = config[BUILD + "_hapmap"]
-kgp = config[BUILD + "_kgp"]
-omni = config[BUILD + "_omni"]
-
-
 include: "rules/bwa_align.smk"
 include: "rules/sort_bam.smk"
 include: "rules/stats_clean_merge.smk"
