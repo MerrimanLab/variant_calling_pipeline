@@ -4,6 +4,12 @@ def get_chrs(wildcards):
     else:
         return ["-L chr{chr}".format(chr=chr) for chr in CHRS]
 
+def get_gvcfs(wildcards) :
+    if wildcards.build == "b37":
+        return expand("{build}/raw_vcf/{sample}_{build}.raw.snps.indels.g.vcf.gz", sample = sequences.Sample.unique(), build = "b37")
+    else:
+        return  expand("{build}/raw_vcf/{sample}_{build}.raw.snps.indels.g.vcf.gz", sample = sequences.Sample.unique(), build = "b38")
+
 rule haplotype_caller:
     input:
         ref = get_ref,
@@ -33,7 +39,7 @@ rule haplotype_caller:
 
 rule genomics_db_import:
     input:
-        vcfs = expand("{build}/raw_vcf/{sample}_{build}.raw.snps.indels.g.vcf.gz", sample = sequences.Sample.unique(), build = "b37"),
+        vcfs = get_gvcfs,
         ref = get_ref
     output:
         dir = directory("{build}/db_import_{chr}")
