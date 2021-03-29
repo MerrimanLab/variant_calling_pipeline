@@ -1,4 +1,3 @@
-name: mwseq
 channels:
   - conda-forge
   - bioconda
