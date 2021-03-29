@@ -1,4 +1,4 @@
-sequences_metadata: exome_sequences_metadata.tsv 
+sequences_metadata: sequences_metadata.tsv 
 
 
 # b37 reference files
