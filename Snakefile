@@ -69,13 +69,13 @@ rule all:
         expand("qc/fastqc/{sample}.{unique_id}/", zip, sample = sequences["Sample"], unique_id = sequences["unique_id"]),
 #        expand("qc/fastqc/{sample}.{unique_id}.R2_fastqc.zip", zip, sample = sequences["Sample"], unique_id = sequences["unique_id"]),
 #        expand("b37/{chr}.exome.list", chr = CHRS_b37),
-        expand(expand("{{build}}/stats/bwa/{sample}/{sample}.{unique_id}_{{build}}.idxstats.tsv", zip, sample = sequences['Sample'], unique_id =  sequences["unique_id"]), build = ["b37","b38"] ),
-        expand("{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.snps.indels.vcf.gz", chr = CHRS, build = "b37"),
+        expand(expand("{{build}}/stats/bwa/{sample}/{sample}.{unique_id}_{{build}}.idxstats.tsv", zip, sample = sequences['Sample'], unique_id =  sequences["unique_id"]), build = ["b38"] ),
+        expand("{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.snps.indels.vcf.gz", chr = CHRS, build = "b38"),
         expand(expand("{{build}}/aligned_bam/marked_dup/{sample}_{{build}}.clean.markdup.bam", zip, sample = sequences['Sample'], unique_id = sequences['unique_id']), build = "b38"),
         expand("b38/aligned_bam/bqsr/{sample}_b38.bqsr.bam", sample = sequences.Sample.unique()),
         expand("{build}/vqsr_vcf/{chr}_all_samples_genotyped_{build}.vqsr.snps.indels.vcf.gz", chr = CHRS, build = "b38"),
-
-
+        expand(expand("{{build}}/stats/coverage/bwa/{sample}/{sample}.{unique_id}_{{build}}.coverage.tsv", zip, sample = sequences['Sample'], unique_id =  sequences["unique_id"]), build = ["b38"] ), # individual bam files
+        expand("{build}/stats/coverage/bqsr/{sample}_{build}.bqsr.coverage.tsv", sample = sequences.Sample.unique(), build = "b38") # coverage on combined files
 
 include: "rules/fastqc.smk"
 include: "rules/bwa_align.smk"
@@ -83,5 +83,6 @@ include: "rules/sort_bam.smk"
 include: "rules/stats_clean_merge.smk"
 include: "rules/mark_dup.smk"
 include: "rules/bqsr.smk"
+include: "rules/coverage.smk"
 include: "vcf.snake"
 #include: "b38_vcf.snake"

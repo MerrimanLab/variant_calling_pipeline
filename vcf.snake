@@ -4,6 +4,13 @@ def get_chrs(wildcards):
     else:
         return ["-L chr{chr}".format(chr=chr) for chr in CHRS]
 
+def get_chr(wildcards):
+    if wildcards.build =="b37":
+        return ["-L" +  "".join(wildcards.chr)]
+    else:
+        return ["-L chr" + "".join(wildcards.chr)]
+
+
 def get_gvcfs(wildcards) :
     if wildcards.build == "b37":
         return expand("{build}/raw_vcf/{sample}_{build}.raw.snps.indels.g.vcf.gz", sample = sequences.Sample.unique(), build = "b37")
@@ -49,9 +56,11 @@ rule genomics_db_import:
         "{build}/logs/vcf/db_import_{chr}.log"
     params:
         nice = nice_cmd,
-        tmp_dir = "{build}/tmp"
+        tmp_dir = "{build}/tmp",
+        chrom = get_chr,
+    threads: 5
     shell:
-        "mkdir -p {params.tmp_dir}; {params.nice} gatk --java-options \"-Xmx16g -Xms8g\" GenomicsDBImport $(echo {input.vcfs} | sed 's/^\| / -V /g') -L {wildcards.chr} --genomicsdb-workspace-path {output.dir} --tmp-dir {params.tmp_dir} 2> {log}"
+        "mkdir -p {params.tmp_dir}; {params.nice} gatk --java-options \"-Xmx16g -Xms8g\" GenomicsDBImport $(echo {input.vcfs} | sed 's/^\| / -V /g') {params.chrom} --genomicsdb-workspace-path {output.dir} --tmp-dir {params.tmp_dir} 2> {log} --reader-threads {threads}"
 
 rule genotype_vcf:
     input:
@@ -67,9 +76,10 @@ rule genotype_vcf:
     params:
         nice = nice_cmd,
         tmp_dir = "{build}/tmp",
+        chrom = get_chr,
         opts = "--java-options \"-Xmx24g -DGATK_STACKTRACE_ON_USER_EXCEPTION=true\" --spark-runner LOCAL"
     shell:
-        "mkdir -p {params.tmp_dir} ;{params.nice} gatk {params.opts} GenotypeGVCFs -R {input.ref} -V gendb://{input.db} -L {wildcards.chr} -O {output.vcf} --tmp-dir={params.tmp_dir} 2> {log}"
+        "mkdir -p {params.tmp_dir} ;{params.nice} gatk {params.opts} GenotypeGVCFs -R {input.ref} -V gendb://{input.db} {params.chrom} -O {output.vcf} --tmp-dir={params.tmp_dir} 2> {log}"
 
 
 rule sites_only:
