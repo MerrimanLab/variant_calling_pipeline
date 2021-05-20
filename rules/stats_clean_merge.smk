@@ -23,9 +23,10 @@ rule clean:
     wildcard_constraints:
         sample="[A-Za-z\d-]+"
     params:
-        nice = nice_cmd
+        nice = nice_cmd,
+        opts = "--java-options \"-Xmx8g\""
     shell:
-        "{params.nice} gatk CleanSam -I {input.bam} -O {output.bam} -CREATE_INDEX true 2> {log}"
+        "{params.nice} gatk {params.opts} CleanSam -I {input.bam} -O {output.bam} -CREATE_INDEX true 2> {log}"
 
 rule merge_bams:
     input:
